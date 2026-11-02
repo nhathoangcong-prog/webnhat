@@ -1,0 +1,6 @@
+{
+  "name": "Thầy Hoàng Nhật - THPT Thạnh Lộc | Smart Education",
+  "description": "Hệ thống Quản lý và Hỗ trợ Giảng dạy Thông minh môn Toán, Vật lý, Hóa học - Trường THPT Thạnh Lộc TP.HCM",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
