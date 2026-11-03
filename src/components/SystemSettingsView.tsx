@@ -12,10 +12,22 @@ import {
   CheckCircle,
   AlertTriangle,
   History,
-  Lock
+  Lock,
+  Copy,
+  Check,
+  UploadCloud,
+  DownloadCloud
 } from 'lucide-react';
 import { db } from '../services/db.ts';
 import { UserRole } from '../types/index.ts';
+import {
+  getSupabaseConfig,
+  saveSupabaseConfig,
+  testSupabaseConnection,
+  isSupabaseConfigured,
+  clearSupabaseConfig
+} from '../services/supabaseClient.ts';
+import { supabaseDataService, SyncStats } from '../services/supabaseDataService.ts';
 
 interface SystemSettingsViewProps {
   currentRole: UserRole;
@@ -26,9 +38,13 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
   currentRole,
   onRoleChange,
 }) => {
-  const [supabaseUrl, setSupabaseUrl] = useState<string>(localStorage.getItem('supabase_url') || 'https://xyzcompany.supabase.co');
-  const [supabaseKey, setSupabaseKey] = useState<string>(localStorage.getItem('supabase_anon_key') || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...');
+  const currentCfg = getSupabaseConfig();
+  const [supabaseUrl, setSupabaseUrl] = useState<string>(currentCfg.url);
+  const [supabaseKey, setSupabaseKey] = useState<string>(currentCfg.anonKey);
   const [testConnStatus, setTestConnStatus] = useState<string>('');
+  const [isTesting, setIsTesting] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [passwordForm, setPasswordForm] = useState({ oldPass: '', newPass: '', confirmPass: '' });
   const [passSuccessMsg, setPassSuccessMsg] = useState('');
   const [logs, setLogs] = useState(db.getState().auditLogs);
@@ -75,14 +91,62 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
     }
   };
 
-  const handleTestSupabase = () => {
+  const handleTestSupabase = async () => {
+    setIsTesting(true);
     setTestConnStatus('Đang kiểm tra kết nối với Supabase Cloud PostgreSQL...');
-    localStorage.setItem('supabase_url', supabaseUrl);
-    localStorage.setItem('supabase_anon_key', supabaseKey);
+    
+    const res = await testSupabaseConnection(supabaseUrl, supabaseKey);
+    setIsTesting(false);
 
-    setTimeout(() => {
-      setTestConnStatus('Kết nối kiểm tra thành công! Cấu hình đã được lưu vào hệ thống.');
-    }, 1000);
+    if (res.success) {
+      saveSupabaseConfig(supabaseUrl, supabaseKey);
+      setTestConnStatus(`✅ ${res.message}`);
+      db.logAction('Kết nối Supabase Cloud thành công');
+    } else {
+      setTestConnStatus(`❌ ${res.message}`);
+    }
+  };
+
+  const handleSyncToCloud = async () => {
+    if (!isSupabaseConfigured()) {
+      alert('Vui lòng kiểm tra và lưu cấu hình Supabase hợp lệ trước khi đồng bộ!');
+      return;
+    }
+    setIsSyncing(true);
+    const res = await supabaseDataService.syncLocalDataToSupabase();
+    setIsSyncing(false);
+    if (res.success) {
+      alert(res.message);
+      db.logAction('Đồng bộ dữ liệu cục bộ lên Supabase Cloud');
+    } else {
+      alert(res.message);
+    }
+  };
+
+  const handlePullFromCloud = async () => {
+    if (!isSupabaseConfigured()) {
+      alert('Vui lòng kiểm tra và lưu cấu hình Supabase hợp lệ trước!');
+      return;
+    }
+    if (window.confirm('Tải toàn bộ dữ liệu mới nhất từ Supabase về hệ thống? Dữ liệu cục bộ sẽ được cập nhật.')) {
+      const res = await supabaseDataService.pullDataFromSupabase();
+      alert(res.message);
+      if (res.success) {
+        window.location.reload();
+      }
+    }
+  };
+
+  const handleCopySql = async () => {
+    try {
+      const response = await fetch('/supabase_schema.sql');
+      const text = await response.text();
+      await navigator.clipboard.writeText(text);
+      setCopiedSql(true);
+      setTimeout(() => setCopiedSql(false), 3000);
+    } catch (err) {
+      alert('Tệp supabase_schema.sql có sẵn trong thư mục gốc của hệ thống.');
+    }
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -268,18 +332,65 @@ export const SystemSettingsView: React.FC<SystemSettingsViewProps> = ({
               />
             </div>
 
-            <button
-              onClick={handleTestSupabase}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg cursor-pointer"
-            >
-              Kiểm tra & Lưu cấu hình Supabase
-            </button>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleTestSupabase}
+                disabled={isTesting}
+                className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-xs transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {isTesting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Server className="w-3.5 h-3.5" />}
+                <span>{isTesting ? 'Đang kiểm tra...' : 'Kiểm tra & Lưu'}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleCopySql}
+                className="px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-300 font-bold rounded-xl transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {copiedSql ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copiedSql ? 'Đã sao chép SQL!' : 'Sao chép file SQL'}</span>
+              </button>
+            </div>
 
             {testConnStatus && (
-              <div className="p-2.5 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-200 font-medium">
+              <div className="p-2.5 rounded-xl border text-xs font-medium leading-relaxed bg-slate-50 border-slate-200">
                 {testConnStatus}
               </div>
             )}
+
+            {/* Cloud Sync Tools */}
+            <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80 space-y-2 mt-2">
+              <div className="font-bold text-emerald-950 text-xs flex items-center justify-between">
+                <span>Đồng bộ dữ liệu với Supabase Cloud</span>
+                <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                  isSupabaseConfigured() ? 'bg-emerald-200 text-emerald-900 font-bold' : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {isSupabaseConfigured() ? 'Cloud Ready' : 'Chưa lưu cấu hình'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={handleSyncToCloud}
+                  disabled={isSyncing}
+                  className="py-1.5 px-2.5 bg-emerald-700 hover:bg-emerald-800 text-white font-bold rounded-lg text-center flex items-center justify-center gap-1.5 shadow-xs cursor-pointer text-[11px]"
+                >
+                  <UploadCloud className="w-3.5 h-3.5" />
+                  <span>{isSyncing ? 'Đang đẩy...' : 'Đẩy dữ liệu lên Cloud'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePullFromCloud}
+                  className="py-1.5 px-2.5 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold rounded-lg text-center flex items-center justify-center gap-1.5 shadow-xs cursor-pointer text-[11px]"
+                >
+                  <DownloadCloud className="w-3.5 h-3.5" />
+                  <span>Tải dữ liệu từ Cloud</span>
+                </button>
+              </div>
+            </div>
           </div>
 
           {/* Backup upload */}

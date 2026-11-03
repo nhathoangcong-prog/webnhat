@@ -740,6 +740,16 @@ export class DatabaseService {
     return true;
   }
 
+  public saveStudent(student: Student): void {
+    const idx = this.state.students.findIndex(s => s.id === student.id);
+    if (idx !== -1) {
+      this.state.students[idx] = { ...this.state.students[idx], ...student };
+    } else {
+      this.state.students.push(student);
+    }
+    this.saveToStorage(this.state);
+  }
+
   // --- Grades Management ---
   public getGrades(classId?: string, subjectCode?: 'TOAN' | 'VATLY' | 'HOAHOC' | 'all', semester: 'HK1' | 'HK2' = 'HK1'): GradeItem[] {
     let list = this.state.grades.filter(g => g.semester === semester);

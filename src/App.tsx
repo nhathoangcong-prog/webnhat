@@ -13,21 +13,46 @@ import { AnalyticsView } from './components/AnalyticsView.tsx';
 import { ResourcesView } from './components/ResourcesView.tsx';
 import { ParentConnectView } from './components/ParentConnectView.tsx';
 import { SystemSettingsView } from './components/SystemSettingsView.tsx';
+import { AuthScreen } from './components/AuthScreen.tsx';
+import { SupabaseModal } from './components/SupabaseModal.tsx';
 import { db } from './services/db.ts';
-import { UserRole } from './types/index.ts';
+import { authService } from './services/authService.ts';
+import { UserRole, UserAccount } from './types/index.ts';
 import { Menu, X, CheckCircle, Bell } from 'lucide-react';
 
 export default function App() {
-  const [currentRole, setCurrentRole] = useState<UserRole>('teacher');
+  const [currentUser, setCurrentUser] = useState<UserAccount | null>(() => authService.getCurrentUser());
+  const [currentRole, setCurrentRole] = useState<UserRole>(() => {
+    const user = authService.getCurrentUser();
+    return user ? user.role : 'teacher';
+  });
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [showNotificationsModal, setShowNotificationsModal] = useState(false);
+  const [showSupabaseModal, setShowSupabaseModal] = useState(false);
   const [aiQuickActionKey, setAiQuickActionKey] = useState<string>('');
 
   const state = db.getState();
   const profile = state.profile;
   const notifications = db.getNotifications();
   const schedules = state.schedules;
+
+  // Handle login success
+  const handleLoginSuccess = (user: UserAccount) => {
+    setCurrentUser(user);
+    setCurrentRole(user.role);
+    setActiveTab('dashboard');
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    if (window.confirm('Bạn có muốn đăng xuất khỏi phiên làm việc hiện tại?')) {
+      authService.logout();
+      setCurrentUser(null);
+      setCurrentRole('teacher');
+      setActiveTab('dashboard');
+    }
+  };
 
   // Handle role switch
   const handleRoleChange = (role: UserRole) => {
@@ -46,6 +71,11 @@ export default function App() {
     setActiveTab('ai_assistant');
   };
 
+  // If not logged in, render AuthScreen
+  if (!currentUser) {
+    return <AuthScreen onLoginSuccess={handleLoginSuccess} />;
+  }
+
   return (
     <div className="min-h-screen bg-[#f1f5f9] flex flex-col font-serif select-text text-slate-800">
       {/* 1. Header matching the reference screenshot */}
@@ -53,15 +83,11 @@ export default function App() {
         currentRole={currentRole}
         onRoleChange={handleRoleChange}
         profile={profile}
+        currentUser={currentUser}
         notificationCount={notifications.length}
         onNotificationClick={() => setShowNotificationsModal(true)}
-        onLogoutClick={() => {
-          if (window.confirm('Bạn có muốn đăng xuất khỏi phiên làm việc hiện tại?')) {
-            alert('Đã đăng xuất an toàn khỏi hệ thống!');
-            setCurrentRole('teacher');
-            setActiveTab('dashboard');
-          }
-        }}
+        onOpenSupabaseModal={() => setShowSupabaseModal(true)}
+        onLogoutClick={handleLogout}
       />
 
       {/* Mobile Top Bar with Menu Hamburger Toggle */}
@@ -186,6 +212,12 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Supabase Cloud Connection & Sync Modal */}
+      <SupabaseModal
+        isOpen={showSupabaseModal}
+        onClose={() => setShowSupabaseModal(false)}
+      />
     </div>
   );
 }

@@ -1,5 +1,22 @@
 export type UserRole = 'teacher' | 'student' | 'parent';
 
+export interface UserAccount {
+  id: string;
+  username: string;
+  password: string;
+  fullName: string;
+  role: UserRole;
+  email?: string;
+  phone?: string;
+  school?: string;
+  title?: string;
+  studentCode?: string;
+  studentId?: string; // Linked student record ID
+  className?: string;
+  avatarUrl?: string;
+  createdAt: string;
+}
+
 export interface Profile {
   id: string;
   email: string;

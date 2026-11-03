@@ -12,14 +12,17 @@ import {
   ShieldCheck,
   CheckCircle2
 } from 'lucide-react';
-import { UserRole, Profile } from '../types/index.ts';
+import { UserRole, Profile, UserAccount } from '../types/index.ts';
+import { isSupabaseConfigured } from '../services/supabaseClient.ts';
 
 interface HeaderProps {
   currentRole: UserRole;
   onRoleChange: (role: UserRole) => void;
   profile: Profile;
+  currentUser?: UserAccount | null;
   notificationCount: number;
   onNotificationClick: () => void;
+  onOpenSupabaseModal?: () => void;
   onLogoutClick: () => void;
 }
 
@@ -27,11 +30,14 @@ export const Header: React.FC<HeaderProps> = ({
   currentRole,
   onRoleChange,
   profile,
+  currentUser,
   notificationCount,
   onNotificationClick,
+  onOpenSupabaseModal,
   onLogoutClick,
 }) => {
   const [showRoleMenu, setShowRoleMenu] = useState(false);
+  const isCloudConnected = isSupabaseConfigured();
 
   // Format current date in Vietnamese
   const today = new Date();
@@ -114,26 +120,34 @@ export const Header: React.FC<HeaderProps> = ({
               title="Đổi vai trò hoặc xem thông tin tài khoản"
             >
               {/* Profile Avatar */}
-              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-200 text-blue-950 font-bold flex items-center justify-center text-xs shadow ring-1 ring-white/60">
-                {currentRole === 'teacher' ? 'HN' : currentRole === 'student' ? 'HS' : 'PH'}
+              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-400 to-yellow-200 text-blue-950 font-bold flex items-center justify-center text-xs shadow ring-1 ring-white/60 uppercase">
+                {currentUser ? (
+                  currentUser.fullName.split(' ').map(n => n[0]).slice(-2).join('')
+                ) : (
+                  currentRole === 'teacher' ? 'HN' : currentRole === 'student' ? 'HS' : 'PH'
+                )}
               </div>
               <div className="flex flex-col">
                 <div className="text-xs font-bold text-white flex items-center gap-1">
-                  <span>
-                    {currentRole === 'teacher'
+                  <span className="truncate max-w-[150px] md:max-w-[200px]">
+                    {currentUser
+                      ? `${currentUser.role === 'teacher' ? 'GV' : currentUser.role === 'student' ? 'HS' : 'PH'}: ${currentUser.fullName}`
+                      : currentRole === 'teacher'
                       ? 'GV: HOÀNG NHẬT'
                       : currentRole === 'student'
                       ? 'HS: NGUYỄN VĂN AN (12A1)'
                       : 'PH: NGUYỄN VĂN BÌNH'}
                   </span>
-                  <ChevronDown className="w-3.5 h-3.5 text-blue-200" />
+                  <ChevronDown className="w-3.5 h-3.5 text-blue-200 flex-shrink-0" />
                 </div>
-                <span className="text-[10px] text-blue-200 font-normal">
-                  {currentRole === 'teacher'
-                    ? 'Giáo viên: Toán – Vật lý – Hóa học'
-                    : currentRole === 'student'
-                    ? 'Học sinh: Khối 12 THPT Thạnh Lộc'
-                    : 'Phụ huynh học sinh HS001'}
+                <span className="text-[10px] text-blue-200 font-normal truncate max-w-[180px]">
+                  {currentUser?.title || (
+                    currentRole === 'teacher'
+                      ? 'Giáo viên: Toán – Vật lý – Hóa học'
+                      : currentRole === 'student'
+                      ? 'Học sinh: Khối 12 THPT Thạnh Lộc'
+                      : 'Phụ huynh học sinh HS001'
+                  )}
                 </span>
               </div>
             </button>
@@ -209,8 +223,8 @@ export const Header: React.FC<HeaderProps> = ({
           <GraduationCap className="w-4 h-4 text-blue-700" />
           <span>
             Chào mừng {currentRole === 'teacher' ? 'thầy ' : currentRole === 'student' ? 'em ' : 'quý phụ huynh '}
-            <strong className="text-blue-900 font-bold">
-              {currentRole === 'teacher' ? 'HOÀNG NHẬT' : currentRole === 'student' ? 'NGUYỄN VĂN AN' : 'NGUYỄN VĂN BÌNH'}
+            <strong className="text-blue-900 font-bold uppercase">
+              {currentUser?.fullName || (currentRole === 'teacher' ? 'HOÀNG NHẬT' : currentRole === 'student' ? 'NGUYỄN VĂN AN' : 'NGUYỄN VĂN BÌNH')}
             </strong>{' '}
             đến với hệ thống!
           </span>
@@ -224,6 +238,23 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="mx-1 text-slate-300">|</span>
             <span className="font-medium text-blue-900">Năm học: 2024 – 2025</span>
           </div>
+
+          {/* Supabase Status Button */}
+          {onOpenSupabaseModal && (
+            <button
+              onClick={onOpenSupabaseModal}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border transition-all cursor-pointer ${
+                isCloudConnected
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100 shadow-xs'
+                  : 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100'
+              }`}
+              title="Quản lý kết nối Cơ sở dữ liệu Supabase"
+            >
+              <span className={`w-2 h-2 rounded-full ${isCloudConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              <span className="hidden sm:inline">Supabase:</span>
+              <span>{isCloudConnected ? 'Cloud' : 'Cấu hình'}</span>
+            </button>
+          )}
 
           {/* Notification Bell */}
           <button

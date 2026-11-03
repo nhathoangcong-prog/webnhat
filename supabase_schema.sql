@@ -231,52 +231,63 @@ CREATE TABLE IF NOT EXISTS public.parent_student_links (
     UNIQUE(parent_profile_id, student_id)
 );
 
--- ==============================================================================
--- KÍCH HOẠT ROW LEVEL SECURITY (RLS) VÀ CHÍNH SÁCH BẢO MẬT
--- ==============================================================================
-
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.classes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.grades ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.exams ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.exam_submissions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.learning_resources ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-
--- 1. GIÁO VIÊN: Toàn quyền truy cập và chỉnh sửa
-CREATE POLICY "Teacher full access profiles" ON public.profiles FOR ALL TO authenticated
-USING (auth.jwt() ->> 'role' = 'teacher' OR id = auth.uid());
-
-CREATE POLICY "Teacher full access classes" ON public.classes FOR ALL TO authenticated
-USING (true);
-
-CREATE POLICY "Teacher full access students" ON public.students FOR ALL TO authenticated
-USING (true);
-
-CREATE POLICY "Teacher full access grades" ON public.grades FOR ALL TO authenticated
-USING (auth.jwt() ->> 'role' = 'teacher');
-
--- 2. HỌC SINH: Chỉ được xem thông tin và điểm của chính mình
-CREATE POLICY "Student read own grades" ON public.grades FOR SELECT TO authenticated
-USING (
-    student_id IN (
-        SELECT s.id FROM public.students s
-        WHERE s.student_code = (auth.jwt() ->> 'student_code')
-    )
+-- 19. BẢNG TÀI KHOẢN ĐĂNG NHẬP (user_accounts)
+CREATE TABLE IF NOT EXISTS public.user_accounts (
+    id TEXT PRIMARY KEY,
+    username VARCHAR(100) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    role VARCHAR(50) NOT NULL CHECK (role IN ('teacher', 'student', 'parent')),
+    email VARCHAR(255),
+    phone VARCHAR(50),
+    school VARCHAR(255) DEFAULT 'TRƯỜNG TRUNG HỌC PHỔ THÔNG THẠNH LỘC',
+    title VARCHAR(255),
+    student_code VARCHAR(50),
+    student_id VARCHAR(100),
+    class_name VARCHAR(50),
+    avatar_url TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. PHỤ HUYNH: Chỉ được xem thông tin của con mình đã được liên kết
-CREATE POLICY "Parent read child grades" ON public.grades FOR SELECT TO authenticated
-USING (
-    student_id IN (
-        SELECT psl.student_id FROM public.parent_student_links psl
-        WHERE psl.parent_profile_id = auth.uid()
-    )
-);
+-- Bật RLS cho user_accounts
+ALTER TABLE public.user_accounts ENABLE ROW LEVEL SECURITY;
 
--- BẢO VỆ ĐỀ THI: Chỉ xem đề đã publish
-CREATE POLICY "Read published exams" ON public.exams FOR SELECT TO authenticated
-USING (status = 'published' OR auth.jwt() ->> 'role' = 'teacher');
+-- Cho phép cả anon (public key) và authenticated đọc và ghi tài khoản
+CREATE POLICY "Allow public read user_accounts" ON public.user_accounts FOR SELECT USING (true);
+CREATE POLICY "Allow public insert user_accounts" ON public.user_accounts FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update user_accounts" ON public.user_accounts FOR UPDATE USING (true);
+
+-- Cho phép công khai truy cập các bảng dữ liệu học tập (hỗ trợ cả anon key từ Frontend)
+CREATE POLICY "Allow public read classes" ON public.classes FOR SELECT USING (true);
+CREATE POLICY "Allow public insert classes" ON public.classes FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update classes" ON public.classes FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public read students" ON public.students FOR SELECT USING (true);
+CREATE POLICY "Allow public insert students" ON public.students FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update students" ON public.students FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public read grades" ON public.grades FOR SELECT USING (true);
+CREATE POLICY "Allow public insert grades" ON public.grades FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update grades" ON public.grades FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public read attendance" ON public.attendance FOR SELECT USING (true);
+CREATE POLICY "Allow public insert attendance" ON public.attendance FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update attendance" ON public.attendance FOR UPDATE USING (true);
+
+CREATE POLICY "Allow public read questions" ON public.questions FOR SELECT USING (true);
+CREATE POLICY "Allow public insert questions" ON public.questions FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public read exams" ON public.exams FOR SELECT USING (true);
+CREATE POLICY "Allow public insert exams" ON public.exams FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "Allow public read notifications" ON public.notifications FOR SELECT USING (true);
+CREATE POLICY "Allow public insert notifications" ON public.notifications FOR INSERT WITH CHECK (true);
+
+-- DỮ LIỆU MẪU TÀI KHOẢN BAN ĐẦU
+INSERT INTO public.user_accounts (id, username, password, full_name, role, email, phone, title)
+VALUES 
+    ('usr_teacher_01', 'thayhoangnhat', '123', 'Hoàng Nhật', 'teacher', 'thayhoangnhat@thptthanhloc.edu.vn', '0903888999', 'Giáo viên bộ môn Toán – Vật lý – Hóa học'),
+    ('usr_student_01', 'hs001', '123', 'Nguyễn Văn An', 'student', 'hs001@thptthanhloc.edu.vn', '0903112233', 'Học sinh lớp 12A1'),
+    ('usr_parent_01', 'ph001', '123', 'Nguyễn Văn Bình', 'parent', 'nguyenvanbinh@gmail.com', '0918123456', 'Phụ huynh học sinh Nguyễn Văn An (12A1)'),
+    ('usr_teacher_02', 'cothu', '123', 'Trần Thị Thu', 'teacher', 'cothu@thptthanhloc.edu.vn', '0903777888', 'Giáo viên chủ nhiệm 12A2')
+ON CONFLICT (username) DO NOTHING;
